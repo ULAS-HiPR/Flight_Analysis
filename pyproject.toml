@@ -1,0 +1,16 @@
+[project]
+name = "flight-analysis"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "catslogs",
+    "kaleido==0.2.1"
+]
+
+[tool.uv.sources]
+catslogs = { path = "lib/cats-logs" }
+
+[tool.uv.extra-build-dependencies]
+pandas = ["setuptools"]

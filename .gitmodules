@@ -1,0 +1,3 @@
+[submodule "lib/cats-logs"]
+	path = lib/cats-logs
+	url = https://github.com/catsystems/cats-logs.git
