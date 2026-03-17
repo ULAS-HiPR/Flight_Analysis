@@ -2,10 +2,11 @@ import pandas as pd
 import plotly.graph_objects as go
 
 class Graph:
-    def __init__(self, name=None, type=None):
+    def __init__(self, name=None, type=None, state=None):
         self.fig = go.Figure()
         self.name = name
         self.type = type
+        self.state = state
 
     def show(self):
         self.fig.show()
@@ -19,6 +20,7 @@ class Graph:
     acceleration_columns = ['acceleration', 'filtered_acceleration']
     altitude_columns = ['height', 'filtered_altitude_AGL', 'Alt', 'FAlt']
     filtered_altitude_columns = ['height', 'FAlt']
+    gps_columns = ['latitude', 'longitude', 'state', 'height']
 
     eggtimer_coloum_names = {
         'Alt' : 'Altitude',

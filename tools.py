@@ -40,8 +40,11 @@ def process_flight_data(file_name, data_type, output_log_path):
             df_dict['gnss_info_df'],
             df_dict['voltage_info_df'],
         ]
-        
-        df_merged = reduce(lambda left, right: pd.merge(left, right, on="ts", how="outer"), dfs)
+        df_with_ts = [df for df in dfs if 'ts' in df.columns]
+            
+        df_merged = reduce(lambda left, right: pd.merge(left, right, on="ts", how="outer"), df_with_ts)
+
+
 
         df_merged = df_merged.drop_duplicates(subset=["ts"])
         df_merged = df_merged.sort_values("ts", kind="mergesort").reset_index(drop=True)
