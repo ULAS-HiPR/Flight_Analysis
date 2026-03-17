@@ -87,8 +87,6 @@ def main():
                 image_path=args.gps_photo,
                 name="Flight 3D"
             )
-
-            graph.get_satellite_image() 
             graph.make_graph()
         
         else:

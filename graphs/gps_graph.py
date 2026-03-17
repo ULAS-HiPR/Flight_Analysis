@@ -15,15 +15,15 @@ class GPSGraph(Graph):
     def __init__(self, combined_df,
                  name="GPS 3D", type="3D",
                  x_axis_title="Longitude", y_axis_title="Latitude",
-                 z_axis_title="Altitude", title="3D GPS Path Colored by Flight State"):
+                 z_axis_title="Altitude", title="3D GPS Path Colored by Flight State", image_path=None):
         """
         combined_df: single merged DataFrame containing ts, latitude, longitude, Alt/height, state, etc.
         satellite_image_path: path to satellite image for ground texture
         """
         super().__init__(name, type=type)
         self.df = combined_df.copy()
+        self.image_path = image_path
 
-        # Initialize figure layout
         self.fig.update_layout(
             title=title,
             scene=dict(
@@ -84,12 +84,13 @@ class GPSGraph(Graph):
 
         print(self.df)
 
-    def get_satellite_image(self, zoom=18, size="1280x1280", margin=0):
+    def make_statlite_url(self,  size="1280x1280", margin=0):
+        '''Gets satallie image from google maps api, and drawes a bounding box around the flight path'''
         key = os.getenv("GOOGLE_MAPS_API")
 
         if key is None:
             raise ValueError("Google API key required for satellite imagery")
-
+    
         lat_min = self.df['latitude'].min() - margin
         lat_max = self.df['latitude'].max() + margin
         lon_min = self.df['longitude'].min() - margin
@@ -114,8 +115,13 @@ class GPSGraph(Graph):
             f"&key={key}"
         )
 
-        response = requests.get(url)
         print(f"url: {url}")    
+        return url
+
+    def get_satellite_image(self, zoom=18, size="1280x1280", margin=0):
+        url = self.make_statlite_url(size=size, margin=margin)
+
+        response = requests.get(url)
 
         if response.status_code == 200:
             img = Image.open(BytesIO(response.content))
@@ -123,41 +129,55 @@ class GPSGraph(Graph):
         else:
             raise RuntimeError(f"Failed to fetch Google satellite image: {response.status_code}")
 
+
+    def lon_to_meters(self, lon, origin_lon, origin_lat):
+        return (lon - origin_lon) * np.cos(np.radians(origin_lat)) * (np.pi / 180) * 6371000
+
+    def lat_to_meters(self, lat, origin_lat):
+        return (lat - origin_lat) * (np.pi / 180) * 6371000
+
+
+    def calcs_for_graphing(self):
         origin_lat = self.df['latitude'].iloc[0]
         origin_lon = self.df['longitude'].iloc[0]
 
-        def lon_to_meters(lon):
-            return (lon - origin_lon) * np.cos(np.radians(origin_lat)) * (np.pi / 180) * 6371000
+        R = 6371000
 
-        def lat_to_meters(lat):
-            return (lat - origin_lat) * (np.pi / 180) * 6371000
+        self.df["x"] = (self.df["longitude"] - origin_lon) * np.cos(np.radians(origin_lat)) * (np.pi/180) * R
+        self.df["y"] = (self.df["latitude"] - origin_lat) * (np.pi/180) * R
+        self.df["z"] = self.df["height"]
 
-        self.x_range = [lon_to_meters(lon) for lon in [lon_min, lon_max]]
-        self.y_range = [lat_to_meters(lat) for lat in [lat_min, lat_max]]
+        lat_range = [self.df['latitude'].min(), self.df['latitude'].max()]
+        lon_range = [self.df['longitude'].min(), self.df['longitude'].max()]
+
+        self.x_range = [self.lon_to_meters(lon, origin_lon, origin_lat) for lon in [lon_range[0], lon_range[1]]]
+        self.y_range = [self.lat_to_meters(lat, origin_lat) for lat in [lat_range[0], lat_range[1]]]
 
     def make_graph(self):
+        self.get_satellite_image()
+        self.calcs_for_graphing()
 
+        if self.image_path is not None:
+            satellite_image = Image.open(self.image_path)
+            image_array = np.array(satellite_image)
 
-        if hasattr(self, 'satellite_image') and self.satellite_image is not None:
-            self.satellite_image = np.flipud(self.satellite_image)
-            img = self.satellite_image 
-    
-            if img.ndim == 2:
-                surface_color = img
-            else:
-                surface_color = img[:, :, 0]
-            # Add as surface
+            #play with these to get the image to line up with the graph
+            image_array = np.flipud(image_array)
+            #image_array = np.rot90(image_array, k=2)  
+            image_array = image_array / 255.0
+
             self.fig.add_trace(
                 go.Surface(
-                    z=np.zeros((img.shape[0], img.shape[1])),  # flat at ground level
-                    x=np.linspace(self.x_range[0], self.x_range[1], img.shape[1]),
-                    y=np.linspace(self.y_range[0], self.y_range[1], img.shape[0]),
-                    surfacecolor=surface_color,  # or average if RGB
+                    z=np.zeros((image_array.shape[0], image_array.shape[1])),  # flat at ground level
+                    x=np.linspace(self.x_range[0], self.x_range[1], image_array.shape[1]),
+                    y=np.linspace(self.y_range[0], self.y_range[1], image_array.shape[0]),
+                    surfacecolor=image_array[:, :, 0],  
                     colorscale="gray",
                     showscale=False,
                     opacity=1.0
                 )
             )
+
         state_colors = {
             "THRUSTING": "red",
             "COASTING": "#24d7f2",
@@ -171,12 +191,19 @@ class GPSGraph(Graph):
             if not state_df.empty:
                 self.fig.add_trace(
                     go.Scatter3d(
-                        x=state_df["longitude"],
-                        y=state_df["latitude"],
+                        x=state_df["x"],
+                        y=state_df["y"],
                         z=state_df["z"],
                         mode='markers+lines',
-                        marker=dict(size=5, color=color),
-                        line=dict(color="grey", width=2),
+                        marker=dict(
+                            size=3,
+                            color=color,
+                            opacity=0.8
+                        ),
+                        line=dict(
+                            color="grey",
+                            width=0.5
+                        ),
                         name=state
                     )
                 )
